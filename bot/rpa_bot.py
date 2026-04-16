@@ -41,7 +41,7 @@ BOT_USER     = _get_secret("BOT_USER", "")
 BOT_PASSWORD = _get_secret("BOT_PASSWORD", "")
 
 # Tiempo de espera máximo para selectores (ms)
-DEFAULT_TIMEOUT = 15_000
+DEFAULT_TIMEOUT = 30_000
 
 StatusCallback = Callable[[str, str], None]  # (message, level: info|success|error|warning)
 
@@ -147,25 +147,38 @@ def _login(page: Page, on_status: StatusCallback) -> None:
 
 def _navigate_to_form(page: Page, on_status: StatusCallback) -> None:
     """
-    Navega al formulario de Hoja de Ruta siguiendo la secuencia real del menú:
-      1. Clic en "Utilidades"  (menú lateral izquierdo, li#menu-1-abm)
-      2. Clic en "Hojas de ruta" icono del segundo menú
-      3. Clic en la opción "Hojas de ruta" dentro de ese menú
+    Navega al formulario de Hoja de Ruta siguiendo la secuencia real del menú.
+    Agregamos esperas extra para estabilidad en entornos Cloud.
     """
     _emit(on_status, "Paso 1 – Haciendo clic en menú 'Utilidades' (li#menu-1-abm)...", "info")
+    page.wait_for_selector("li#menu-1-abm", timeout=DEFAULT_TIMEOUT)
     page.click("li#menu-1-abm")
-    page.wait_for_load_state("networkidle", timeout=DEFAULT_TIMEOUT)
-    _emit(on_status, f"Paso 1 ✅ | URL: {page.url}", "info")
+    
+    # Pausa para permitir que el submenú se despliegue (animación)
+    page.wait_for_timeout(1500)
+    _emit(on_status, "Paso 1 ✅ Menú 'Utilidades' abierto.", "info")
 
-    _emit(on_status, "Paso 2 – Haciendo clic en icono 'Hojas de ruta' (div[title='Hojas de ruta'])...", "info")
-    page.click("div[title='Hojas de ruta']")
-    page.wait_for_load_state("networkidle", timeout=DEFAULT_TIMEOUT)
-    _emit(on_status, f"Paso 2 ✅ | URL: {page.url}", "info")
+    _emit(on_status, "Paso 2 – Buscando icono 'Hojas de ruta'...", "info")
+    selector_paso2 = "div[title*='Hojas de ruta']" # Coincidencia parcial por si hay espacios o mayúsculas
+    try:
+        page.wait_for_selector(selector_paso2, state="visible", timeout=DEFAULT_TIMEOUT)
+        page.click(selector_paso2)
+    except Exception:
+        # Intento alternativo por texto si el título falla
+        _emit(on_status, "Aviso: Reintentando Paso 2 por texto...", "warning")
+        page.locator("div").filter(has_text="Hojas de ruta").first.click(timeout=DEFAULT_TIMEOUT)
 
-    _emit(on_status, "Paso 3 – Haciendo clic en opción 'Hojas de ruta' (li#opcion-menu-hojaderuta)...", "info")
-    page.click("li#opcion-menu-hojaderuta")
-    page.wait_for_load_state("networkidle", timeout=DEFAULT_TIMEOUT)
-    _emit(on_status, f"Paso 3 ✅ Formulario de Hojas de ruta cargado. URL: {page.url}", "success")
+    page.wait_for_timeout(1000)
+    _emit(on_status, "Paso 2 ✅ Icono presionado.", "info")
+
+    _emit(on_status, "Paso 3 – Haciendo clic en opción final 'Hojas de ruta'...", "info")
+    selector_paso3 = "li#opcion-menu-hojaderuta"
+    page.wait_for_selector(selector_paso3, state="visible", timeout=DEFAULT_TIMEOUT)
+    page.click(selector_paso3)
+    
+    # Esperar a que el formulario principal cargue
+    page.wait_for_selector("button#hojaderuta_agregar", timeout=DEFAULT_TIMEOUT)
+    _emit(on_status, f"Paso 3 ✅ Formulario cargado. URL: {page.url}", "success")
 
 
 def _click_agregar_hoja(page: Page, on_status: StatusCallback) -> None:
