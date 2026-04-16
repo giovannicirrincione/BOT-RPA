@@ -260,12 +260,20 @@ with col_upload:
                     cols = st.columns(min(len(selected_gestores), 3) or 1)
                     for i, gestor in enumerate(selected_gestores):
                         with cols[i % len(cols)]:
-                            depositos_gestores[gestor] = st.selectbox(
-                                f"Depósito para {gestor.split(' ')[0]}",
-                                ["General", "Las Heras"],
-                                key=f"depo_{gestor}",
+                            st.markdown(f"**{gestor.split(' ')[0]}**")
+                            origen = st.selectbox(
+                                "Origen",
+                                ["General", "Las Heras", "Maipu"],
+                                key=f"origen_{gestor}",
                                 disabled=st.session_state.bot_running
                             )
+                            destino = st.selectbox(
+                                "Destino",
+                                ["General", "Las Heras", "Maipu"],
+                                key=f"destino_{gestor}",
+                                disabled=st.session_state.bot_running
+                            )
+                            depositos_gestores[gestor] = {"origen": origen, "destino": destino}
             else:
                 st.warning("⚠️ No se detectó la columna 'Gestor'. Se procesará todo el archivo como una sola Hoja de Ruta.")
             
@@ -276,6 +284,27 @@ with col_upload:
             st.error(f"No se pudo leer el archivo: {exc}")
 
     st.divider()
+    st.subheader("Paradas Adicionales")
+    st.caption("Cargá paradas extra con sus coordenadas (ej. -32.89, -68.84) de manera independiente para cada gestor.")
+    
+    extra_stops_dfs = {}
+    if gestor_col and selected_gestores:
+        for gestor in selected_gestores:
+            st.markdown(f"**Paradas para {gestor.split(' ')[0]}**")
+            extra_stops_dfs[gestor] = st.data_editor(
+                pd.DataFrame([{"Tipo Parada": "Estación de servicio", "Coordenadas": ""}]),
+                num_rows="dynamic",
+                use_container_width=True,
+                key=f"stops_{gestor}"
+            )
+    else:
+        extra_stops_dfs["Único"] = st.data_editor(
+            pd.DataFrame([{"Tipo Parada": "Estación de servicio", "Coordenadas": ""}]),
+            num_rows="dynamic",
+            use_container_width=True,
+            key="stops_unico"
+        )
+    
     st.markdown("<br>", unsafe_allow_html=True)
 
     start_btn = st.button(
@@ -309,7 +338,7 @@ def render_log(log: list[tuple[str, str]]) -> str:
     return '<div class="log-box">' + "\n".join(lines) + "</div>"
 
 
-def _run_bot_thread(excel_path: str, q: queue.Queue, headless: bool, selected_gestores: list[str], depositos: dict) -> None:
+def _run_bot_thread(excel_path: str, q: queue.Queue, headless: bool, selected_gestores: list[str], depositos: dict, extra_stops: dict) -> None:
     """Ejecuta el bot en un hilo separado y pone los estados en la queue."""
     def cb(msg: str, level: str = "info") -> None:
         q.put(("status", msg, level))
@@ -327,7 +356,8 @@ def _run_bot_thread(excel_path: str, q: queue.Queue, headless: bool, selected_ge
             excel_path, 
             selected_gestores=selected_gestores,
             depositos_gestores=depositos,
-            on_status=cb, 
+            extra_stops=extra_stops,
+            on_status=cb,  
             headless=headless, 
             on_success_callback=early_done
         )
@@ -339,6 +369,25 @@ def _run_bot_thread(excel_path: str, q: queue.Queue, headless: bool, selected_ge
 
 
 if start_btn and uploaded_file and not st.session_state.bot_running:
+    # Parsing paradas adicionales por gestor
+    extra_stops_dict = {}
+    for g, df_g in extra_stops_dfs.items():
+        g_list = []
+        for _, r in df_g.iterrows():
+            tipo = str(r.get("Tipo Parada", "")).strip()
+            coords = str(r.get("Coordenadas", "")).strip()
+            if coords:
+                parts = coords.split(",")
+                lat = parts[0].strip() if len(parts) > 0 else ""
+                lon = parts[1].strip() if len(parts) > 1 else ""
+                if lat and lon:
+                    g_list.append({
+                        "latitud": lat, 
+                        "longitud": lon, 
+                        "cliente": tipo or "Parada Adicional"
+                    })
+        extra_stops_dict[g] = g_list
+
     # Guardar el archivo con su nombre ORIGINAL en la carpeta data/
     # para que el log y Supabase muestren el nombre real
     data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -356,7 +405,7 @@ if start_btn and uploaded_file and not st.session_state.bot_running:
 
     thread = threading.Thread(
         target=_run_bot_thread,
-        args=(tmp_path, st.session_state.status_queue, headless, selected_gestores, depositos_gestores),
+        args=(tmp_path, st.session_state.status_queue, headless, selected_gestores, depositos_gestores, extra_stops_dict),
         daemon=True,
     )
     thread.start()

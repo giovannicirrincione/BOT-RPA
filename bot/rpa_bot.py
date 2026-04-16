@@ -29,9 +29,9 @@ from bot.db import (
 load_dotenv()
 
 # ─── Constantes de configuración ──────────────────────────────────────────────
-BOT_URL      = st.secrets.get("BOT_URL", "https://sistema-tercero.com/login")
-BOT_USER     = st.secrets.get("BOT_USER", "")
-BOT_PASSWORD = st.secrets.get("BOT_PASSWORD", "")
+BOT_URL      = os.getenv("BOT_URL", "https://sistema-tercero.com/login")
+BOT_USER     = os.getenv("BOT_USER", "")
+BOT_PASSWORD = os.getenv("BOT_PASSWORD", "")
 
 # Tiempo de espera máximo para selectores (ms)
 DEFAULT_TIMEOUT = 15_000
@@ -222,6 +222,17 @@ def _seleccionar_vehiculo(page: Page, vehiculo: str, on_status: StatusCallback) 
         raise RuntimeError(f"Falla obligatoria: No se pudo seleccionar el Vehículo. Detalle: {str(e)}")
 
 
+def _get_base_coords(depo_name: str) -> dict[str, str]:
+    """Retorna las coordenadas del depósito según su nombre."""
+    if depo_name == "Las Heras":
+        return {"latitud": "-32.8411689", "longitud": "-68.8305377", "cliente": f"BASE ({depo_name})"}
+    elif depo_name == "Maipu":
+        return {"latitud": "-32.940681", "longitud": "-68.786823", "cliente": f"BASE ({depo_name})"}
+    else:
+        # Por defecto "General"
+        return {"latitud": "-32.887850", "longitud": "-68.828539", "cliente": f"BASE (General)"}
+
+
 # ─── Formato de coordenadas ───────────────────────────────────────────────────
 
 def _format_coord(value: Any) -> str:
@@ -372,6 +383,7 @@ def run_bot(
     depositos_gestores: dict[str, str] = None,
     on_status: StatusCallback = _noop,
     headless: bool = False,
+    extra_stops: dict = None,
     on_success_callback: Callable[[dict[str, Any]], None] = None,
 ) -> dict[str, Any]:
     """
@@ -428,8 +440,9 @@ def run_bot(
         df[gestor_col] = "Único"
         selected_gestores = ["Único"]
 
-    # Cada gestor procesado incluye ahora 2 paradas adicionales (base origen y base destino)
-    total_rows   = len(df) + (len(df[gestor_col].unique()) * 2)
+    # Cada gestor procesado incluye ahora 2 paradas adicionales (base origen y base destino) más extra_stops si existen
+    extra_stops_count = sum(len(stops) for stops in (extra_stops or {}).values())
+    total_rows   = len(df) + (len(df[gestor_col].unique()) * 2) + extra_stops_count
     success_rows = 0
     error_rows   = 0
 
@@ -492,19 +505,30 @@ def run_bot(
                     continue
 
                 # Generar la lista de paradas inyectando explícitamente el origen y fin
-                # Extraemos qué depósito le corresponde a este Gestor (por defecto General)
-                depo_elegido = (depositos_gestores or {}).get(gestor_name, "General")
-
-                if depo_elegido == "Las Heras":
-                    base_punto = {"latitud": "-32.8411689", "longitud": "-68.8305377", "cliente": "BASE (Las Heras)"}
-                else:
-                    base_punto = {"latitud": "-32.887850", "longitud": "-68.828539", "cliente": "BASE (General)"}
+                # Extraemos qué depósitos le corresponden a este Gestor (por defecto General)
+                depo_config = (depositos_gestores or {}).get(gestor_name, {"origen": "General", "destino": "General"})
                 
-                _emit(on_status, f"📍 Depósito asignado: {depo_elegido}", "info")
+                # Manejar compatibilidad si por algún motivo llega un string solo
+                if isinstance(depo_config, str):
+                    depo_origen = depo_config
+                    depo_destino = depo_config
+                else:
+                    depo_origen = depo_config.get("origen", "General")
+                    depo_destino = depo_config.get("destino", "General")
+
+                base_punto_inicio = _get_base_coords(depo_origen)
+                base_punto_fin    = _get_base_coords(depo_destino)
+                
+                _emit(on_status, f"📍 Ruta asignada: Origen={depo_origen} | Destino={depo_destino}", "info")
                 
                 paradas_list = []
                 # 1. Punto de inicio fijo (índice lógico 0)
-                paradas_list.append({"row_num": 0, "row_dict": base_punto})
+                paradas_list.append({"row_num": 0, "row_dict": base_punto_inicio})
+                
+                # 1.5 Paradas adicionales manuales por gestor
+                if extra_stops and gestor_name in extra_stops:
+                    for ext in extra_stops[gestor_name]:
+                        paradas_list.append({"row_num": 0, "row_dict": ext})
                 
                 # 2. Puntos variables del Excel
                 for idx, row in df_g.iterrows():
@@ -514,7 +538,7 @@ def run_bot(
                     })
                     
                 # 3. Punto de fin fijo (índice alto por defecto para identificarlo fácil)
-                paradas_list.append({"row_num": 999999, "row_dict": base_punto})
+                paradas_list.append({"row_num": 999999, "row_dict": base_punto_fin})
 
                 # Carga secuencial de filas en esta hoja
                 current_dom_row_index = 0
@@ -523,7 +547,15 @@ def run_bot(
                     row_num = item["row_num"]
                     is_last = (local_i == len(paradas_list) - 1)
                     
-                    label_desc = "BASE FIN" if is_last else ("BASE INICIO" if local_i == 0 else f"Fila Excel {row_num}")
+                    if local_i == 0:
+                        label_desc = "BASE INICIO"
+                    elif is_last:
+                        label_desc = "BASE FIN"
+                    elif row_num == 0:
+                        label_desc = f"PARADA MANUAL ({row_dict.get('cliente', 'Extra')})"
+                    else:
+                        label_desc = f"Fila Excel {row_num}"
+                        
                     _emit(on_status, f"▶ [Gestor: {gestor_name}] Procesando parada {local_i + 1} ({label_desc})...", "info")
                     
                     try:
