@@ -336,7 +336,35 @@ def _fill_form_row(
         _emit(on_status, f"  Fila {row_index + 1} – Paso 7 omitido: Última parada del gestor, no se agrega fila vacía extra.", "info")
 
 
+def _reordenar_ruta(page: Page, on_status: StatusCallback) -> None:
+    """
+    Selecciona la opción "Definir automáticamente" y hace clic en el botón "Reordenar"
+    al final de cargar las paradas.
+    """
+    _emit(on_status, "Paso 8 – Seleccionando 'Definir automáticamente'...", "info")
+    try:
+        radio_auto = page.locator("input[type='radio'][name='traza'][value='auto']").first
+        radio_auto.evaluate("node => node.scrollIntoView()")
+        radio_auto.click(force=True)
+        page.wait_for_timeout(500)
+        _emit(on_status, "Paso 8 ✅ 'Definir automáticamente' seleccionado.", "success")
+    except Exception as e:
+        _emit(on_status, "❌ Paso 8: No se pudo seleccionar 'Definir automáticamente'.", "error")
+        raise RuntimeError(f"No se pudo seleccionar 'Definir auto': {e}")
+
+    _emit(on_status, "Paso 9 – Haciendo clic en 'Reordenar'...", "info")
+    try:
+        btn_reord = page.locator("button.btn.--celeste:has-text('Reordenar')").first
+        btn_reord.evaluate("node => node.scrollIntoView()")
+        btn_reord.click(force=True)
+        page.wait_for_timeout(1000)
+        _emit(on_status, "Paso 9 ✅ Puntos reordenados correctamente.", "success")
+    except Exception as e:
+        _emit(on_status, "❌ Paso 9: No se pudo hacer clic en 'Reordenar'.", "error")
+        raise RuntimeError(f"No se pudo clickear 'Reordenar': {e}")
+
 # ─── Función principal exportada ──────────────────────────────────────────────
+
 
 def run_bot(
     excel_path: str,
@@ -532,6 +560,13 @@ def run_bot(
                             _emit(on_status, f"❌ No se pudo recuperar pestaña de {gestor_name}. Abortando este gestor.", "error")
                             break
                             
+                # Tareas finales para el gestor: Reordenar los puntos insertados
+                try:
+                    # _reordenar_ruta(page_g, on_status)
+                    pass
+                except Exception as r_exc:
+                    _emit(on_status, f"⚠️ Aviso: Fallo en ordenamiento de ruta: {r_exc}", "warning")
+
                 # Terminó este gestor. La pestaña se DEJA ABIERTA `page_g` para la revisión manual.
                 _emit(on_status, f"🎉 Gestor {gestor_name} completado. Pestaña lista de fondo.", "info")
 
