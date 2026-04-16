@@ -29,9 +29,9 @@ from bot.db import (
 load_dotenv()
 
 # ─── Constantes de configuración ──────────────────────────────────────────────
-BOT_URL      = os.getenv("BOT_URL", "https://sistema-tercero.com/login")
-BOT_USER     = os.getenv("BOT_USER", "")
-BOT_PASSWORD = os.getenv("BOT_PASSWORD", "")
+BOT_URL      = st.secrets.get("BOT_URL", "https://sistema-tercero.com/login")
+BOT_USER     = st.secrets.get("BOT_USER", "")
+BOT_PASSWORD = st.secrets.get("BOT_PASSWORD", "")
 
 # Tiempo de espera máximo para selectores (ms)
 DEFAULT_TIMEOUT = 15_000
