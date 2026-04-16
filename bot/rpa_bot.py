@@ -401,16 +401,25 @@ def _reordenar_ruta(page: Page, on_status: StatusCallback) -> None:
         _emit(on_status, "❌ Paso 9: No se pudo hacer clic en 'Reordenar'.", "error")
         raise RuntimeError(f"No se pudo clickear 'Reordenar': {e}")
 
-    _emit(on_status, "Paso 10 – Haciendo clic en 'Guardar'...", "info")
+    _emit(on_status, "Paso 10 – Haciendo clic en 'Guardar' (Final)...", "info")
+    selector_save = "#crear-editar-hojaderuta button.btn.--rojo:has-text('Guardar')"
     try:
-        btn_save = page.locator("button.btn.--rojo:has-text('Guardar')").first
+        # Esperar a que el botón esté disponible en el contenedor correcto
+        page.wait_for_selector(selector_save, state="attached", timeout=DEFAULT_TIMEOUT)
+        btn_save = page.locator(selector_save).first
         btn_save.evaluate("node => node.scrollIntoView()")
-        btn_save.click(force=True)
-        page.wait_for_timeout(2000)
-        _emit(on_status, "Paso 10 ✅ Hoja de ruta guardada con éxito.", "success")
+        btn_save.click(force=True, timeout=DEFAULT_TIMEOUT)
+        page.wait_for_timeout(3000) # Espera a que la web procese el guardado
+        _emit(on_status, "Paso 10 ✅ Hoja de ruta enviada a guardar.", "success")
     except Exception as e:
-        _emit(on_status, "❌ Paso 10: No se pudo hacer clic en 'Guardar'.", "error")
-        raise RuntimeError(f"No se pudo clickear 'Guardar': {e}")
+        _emit(on_status, f"Aviso: Reintento agresivo en Paso 10... ({e})", "warning")
+        try:
+            page.evaluate(f"document.querySelector('{selector_save}').click()")
+            page.wait_for_timeout(3000)
+            _emit(on_status, "Paso 10 ✅ Guardado forzado mediante JS.", "success")
+        except Exception as e2:
+            _emit(on_status, "❌ Paso 10: No se pudo guardar ni siquiera por JS.", "error")
+            raise RuntimeError(f"Falla crítica al intentar Guardar: {e2}")
 
 # ─── Función principal exportada ──────────────────────────────────────────────
 

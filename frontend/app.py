@@ -20,7 +20,12 @@ def _install_browsers():
     except Exception as e:
         st.error(f"Error al instalar navegadores de Playwright: {e}")
 
-if st.secrets.get("DEPLOY_ENV") == "streamlit":
+try:
+    is_streamlit_cloud = st.secrets.get("DEPLOY_ENV") == "streamlit"
+except Exception:
+    is_streamlit_cloud = False
+
+if is_streamlit_cloud:
     # Solo ejecutar en el cloud para no ralentizar el desarrollo local
     if "browsers_installed" not in st.session_state:
         with st.spinner("Preparando entorno del bot..."):
@@ -219,12 +224,16 @@ if "status_queue"  not in st.session_state:
 with st.sidebar:
     st.header("Configuración")
     # En Cloud es obligatorio usar headless (sin ventana) porque no hay pantalla conectada.
-    is_cloud = (st.secrets.get("DEPLOY_ENV") == "streamlit")
+    try:
+        is_cloud = (st.secrets.get("DEPLOY_ENV") == "streamlit")
+    except Exception:
+        is_cloud = False
+
     headless = st.toggle(
         "Modo headless (sin ventana)", 
-        value=True, 
+        value=is_cloud, 
         disabled=is_cloud,
-        help="En Streamlit Cloud este modo es obligatorio." if is_cloud else "Localmente permite ver el navegador."
+        help="En Streamlit Cloud este modo es obligatorio." if is_cloud else "Desactivalo para ver el navegador en tu PC."
     )
     if is_cloud:
         headless = True
