@@ -402,23 +402,23 @@ def _reordenar_ruta(page: Page, on_status: StatusCallback) -> None:
         raise RuntimeError(f"No se pudo clickear 'Reordenar': {e}")
 
     _emit(on_status, "Paso 10 – Haciendo clic en 'Guardar' (Final)...", "info")
-    selector_save = "#crear-editar-hojaderuta button.btn.--rojo:has-text('Guardar')"
+    selector_save = "button.btn.--rojo"
     try:
-        # Esperar a que el botón esté disponible en el contenedor correcto
+        # Intentamos esperar al botón por clase y texto en Playwright
         page.wait_for_selector(selector_save, state="attached", timeout=DEFAULT_TIMEOUT)
-        btn_save = page.locator(selector_save).first
-        btn_save.evaluate("node => node.scrollIntoView()")
+        btn_save = page.locator(selector_save).filter(has_text="Guardar").first
         btn_save.click(force=True, timeout=DEFAULT_TIMEOUT)
-        page.wait_for_timeout(3000) # Espera a que la web procese el guardado
+        page.wait_for_timeout(3000)
         _emit(on_status, "Paso 10 ✅ Hoja de ruta enviada a guardar.", "success")
     except Exception as e:
-        _emit(on_status, f"Aviso: Reintento agresivo en Paso 10... ({e})", "warning")
+        _emit(on_status, "Aviso: Reintento agresivo en Paso 10...", "warning")
         try:
-            page.evaluate(f"document.querySelector('{selector_save}').click()")
+            # Plan B: Buscar por texto puro usando JS en el navegador
+            page.evaluate("() => { const btns = Array.from(document.querySelectorAll('button')); const b = btns.find(x => x.innerText.includes('Guardar')); if(b) b.click(); }")
             page.wait_for_timeout(3000)
             _emit(on_status, "Paso 10 ✅ Guardado forzado mediante JS.", "success")
         except Exception as e2:
-            _emit(on_status, "❌ Paso 10: No se pudo guardar ni siquiera por JS.", "error")
+            _emit(on_status, "❌ Paso 10: No se pudo guardar.", "error")
             raise RuntimeError(f"Falla crítica al intentar Guardar: {e2}")
 
 # ─── Función principal exportada ──────────────────────────────────────────────
