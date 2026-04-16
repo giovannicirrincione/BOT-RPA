@@ -173,11 +173,18 @@ def _navigate_to_form(page: Page, on_status: StatusCallback) -> None:
 
     _emit(on_status, "Paso 3 – Haciendo clic en opción final 'Hojas de ruta'...", "info")
     selector_paso3 = "li#opcion-menu-hojaderuta"
-    page.wait_for_selector(selector_paso3, state="visible", timeout=DEFAULT_TIMEOUT)
-    page.click(selector_paso3)
-    
-    # Esperar a que el formulario principal cargue
-    page.wait_for_selector("button#hojaderuta_agregar", timeout=DEFAULT_TIMEOUT)
+    try:
+        # Intentamos esperar normal
+        page.wait_for_selector(selector_paso3, state="attached", timeout=DEFAULT_TIMEOUT)
+        # Forzamos el clic en el primero que encuentre, incluso si Playwright duda de su visibilidad
+        page.locator(selector_paso3).first.click(force=True, timeout=DEFAULT_TIMEOUT)
+    except Exception as e:
+        _emit(on_status, f"Aviso: Reintento agresivo en Paso 3... ({e})", "warning")
+        page.evaluate(f"document.querySelector('{selector_paso3}').click()")
+
+    # Esperar a que el formulario principal cargue (botón Agregar) con paciencia
+    _emit(on_status, "Esperando carga del formulario final...", "info")
+    page.wait_for_selector("button#hojaderuta_agregar", state="visible", timeout=DEFAULT_TIMEOUT)
     _emit(on_status, f"Paso 3 ✅ Formulario cargado. URL: {page.url}", "success")
 
 
