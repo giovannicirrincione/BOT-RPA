@@ -14,8 +14,17 @@ _client: Client | None = None
 def get_client() -> Client:
     global _client
     if _client is None:
-        url = os.environ["SUPABASE_URL"]
-        key = os.environ["SUPABASE_KEY"]
+        try:
+            import streamlit as st
+            url = st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL")
+            key = st.secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_KEY")
+        except Exception:
+            url = os.environ.get("SUPABASE_URL")
+            key = os.environ.get("SUPABASE_KEY")
+
+        if not url or not key:
+            raise ValueError("Faltan las variables SUPABASE_URL o SUPABASE_KEY.")
+            
         _client = create_client(url, key)
     return _client
 

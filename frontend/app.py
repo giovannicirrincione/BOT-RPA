@@ -9,6 +9,23 @@ from datetime import datetime
 
 import pandas as pd
 import streamlit as st
+import subprocess
+
+# ─── Inicialización de Playwright para Cloud ──────────────────────────────────
+def _install_browsers():
+    """Instala Chromium si no está presente (específico para Streamlit Cloud)."""
+    try:
+        # Correr el comando de instalación
+        subprocess.run(["playwright", "install", "chromium"], check=True)
+    except Exception as e:
+        st.error(f"Error al instalar navegadores de Playwright: {e}")
+
+if st.secrets.get("DEPLOY_ENV") == "streamlit":
+    # Solo ejecutar en el cloud para no ralentizar el desarrollo local
+    if "browsers_installed" not in st.session_state:
+        with st.spinner("Preparando entorno del bot..."):
+            _install_browsers()
+            st.session_state.browsers_installed = True
 
 # Asegurar que el root del proyecto esté en el path
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
