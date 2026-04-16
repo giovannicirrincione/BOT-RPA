@@ -375,11 +375,22 @@ def _reordenar_ruta(page: Page, on_status: StatusCallback) -> None:
         btn_reord = page.locator("button.btn.--celeste:has-text('Reordenar')").first
         btn_reord.evaluate("node => node.scrollIntoView()")
         btn_reord.click(force=True)
-        page.wait_for_timeout(1000)
+        page.wait_for_timeout(2000) # Espera un poco más para que procese el orden
         _emit(on_status, "Paso 9 ✅ Puntos reordenados correctamente.", "success")
     except Exception as e:
         _emit(on_status, "❌ Paso 9: No se pudo hacer clic en 'Reordenar'.", "error")
         raise RuntimeError(f"No se pudo clickear 'Reordenar': {e}")
+
+    _emit(on_status, "Paso 10 – Haciendo clic en 'Guardar'...", "info")
+    try:
+        btn_save = page.locator("button.btn.--rojo:has-text('Guardar')").first
+        btn_save.evaluate("node => node.scrollIntoView()")
+        btn_save.click(force=True)
+        page.wait_for_timeout(2000)
+        _emit(on_status, "Paso 10 ✅ Hoja de ruta guardada con éxito.", "success")
+    except Exception as e:
+        _emit(on_status, "❌ Paso 10: No se pudo hacer clic en 'Guardar'.", "error")
+        raise RuntimeError(f"No se pudo clickear 'Guardar': {e}")
 
 # ─── Función principal exportada ──────────────────────────────────────────────
 
@@ -599,10 +610,9 @@ def run_bot(
                             _emit(on_status, f"❌ No se pudo recuperar pestaña de {gestor_name}. Abortando este gestor.", "error")
                             break
                             
-                # Tareas finales para el gestor: Reordenar los puntos insertados
+                # Tareas finales para el gestor: Reordenar y Guardar
                 try:
-                    # _reordenar_ruta(page_g, on_status)
-                    pass
+                    _reordenar_ruta(page_g, on_status)
                 except Exception as r_exc:
                     _emit(on_status, f"⚠️ Aviso: Fallo en ordenamiento de ruta: {r_exc}", "warning")
 

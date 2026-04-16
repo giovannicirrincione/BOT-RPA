@@ -218,7 +218,16 @@ if "status_queue"  not in st.session_state:
 # ─── Sidebar: configuración ───────────────────────────────────────────────────
 with st.sidebar:
     st.header("Configuración")
-    headless = st.toggle("Modo headless (sin ventana)", value=False)
+    # En Cloud es obligatorio usar headless (sin ventana) porque no hay pantalla conectada.
+    is_cloud = (st.secrets.get("DEPLOY_ENV") == "streamlit")
+    headless = st.toggle(
+        "Modo headless (sin ventana)", 
+        value=True, 
+        disabled=is_cloud,
+        help="En Streamlit Cloud este modo es obligatorio." if is_cloud else "Localmente permite ver el navegador."
+    )
+    if is_cloud:
+        headless = True
     st.divider()
     st.markdown(
         "**Variables de entorno requeridas:**\n"
