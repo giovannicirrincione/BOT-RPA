@@ -402,24 +402,39 @@ def _reordenar_ruta(page: Page, on_status: StatusCallback) -> None:
         raise RuntimeError(f"No se pudo clickear 'Reordenar': {e}")
 
     _emit(on_status, "Paso 10 – Haciendo clic en 'Guardar' (Final)...", "info")
-    selector_save = "button.btn.--rojo"
+    selector_modal = "#crear-editar-hojaderuta"
+    
     try:
-        # Intentamos esperar al botón por clase y texto en Playwright
-        page.wait_for_selector(selector_save, state="attached", timeout=DEFAULT_TIMEOUT)
-        btn_save = page.locator(selector_save).filter(has_text="Guardar").first
-        btn_save.click(force=True, timeout=DEFAULT_TIMEOUT)
-        page.wait_for_timeout(3000)
-        _emit(on_status, "Paso 10 ✅ Hoja de ruta enviada a guardar.", "success")
+        # Pausa extra de seguridad antes de intentar guardar
+        page.wait_for_timeout(1500)
+        
+        # Intento 1: Selector de rol (el más robusto de Playwright)
+        btn_save = page.get_by_role("button", name="Guardar").first
+        btn_save.click(force=True, timeout=10000)
     except Exception as e:
-        _emit(on_status, "Aviso: Reintento agresivo en Paso 10...", "warning")
+        _emit(on_status, f"Aviso: Reintento agresivo por JS en Paso 10... ({e})", "warning")
         try:
-            # Plan B: Buscar por texto puro usando JS en el navegador
+            # Plan B: Clic forzado por JavaScript
             page.evaluate("() => { const btns = Array.from(document.querySelectorAll('button')); const b = btns.find(x => x.innerText.includes('Guardar')); if(b) b.click(); }")
-            page.wait_for_timeout(3000)
-            _emit(on_status, "Paso 10 ✅ Guardado forzado mediante JS.", "success")
         except Exception as e2:
-            _emit(on_status, "❌ Paso 10: No se pudo guardar.", "error")
-            raise RuntimeError(f"Falla crítica al intentar Guardar: {e2}")
+            _emit(on_status, "❌ Paso 10: Fallo crítico en el clic de guardado.", "error")
+            raise RuntimeError(f"No se pudo clickear Guardar: {e2}")
+
+    # --- VERIFICACIÓN DE CIERRE ---
+    _emit(on_status, "Verificando que la hoja se haya guardado (esperando cierre del formulario)...", "info")
+    try:
+        # Si el modal sigue visible después de 5 segundos, algo falló (posiblemente validación de datos)
+        page.wait_for_selector(selector_modal, state="hidden", timeout=5000)
+        _emit(on_status, "Paso 10 ✅ Hoja de ruta guardada con éxito (formulario cerrado).", "success")
+    except Exception:
+        _emit(on_status, "⚠️ El formulario no se cerró tras cliquear 'Guardar'. Es posible que falten campos obligatorios (como el Cuestionario).", "warning")
+        # No levantamos error para no romper el bucle, pero avisamos al usuario
+        # Tomar screenshot para que el usuario vea qué pasó
+        try:
+            ss_path = f"data/error_guardado_{int(time.time())}.png"
+            page.screenshot(path=ss_path)
+            _emit(on_status, f"📸 Screenshot de validación guardada en {ss_path}", "info")
+        except: pass
 
 # ─── Función principal exportada ──────────────────────────────────────────────
 
